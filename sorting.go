@@ -1,63 +1,98 @@
 package main
 
 import (
+    "os"
     "fmt"
     "time"
     "math"
-    "os"
+    "sort"
+    "bufio"
     "strconv"
     "math/rand"
-    "sort"
     "io/ioutil"
-    "bufio"
+    "github.com/akamensky/argparse"
 )
 
-func merge_sort_multi(list_part []int, responses chan []int) {
-    responses <- merge_sort(list_part)
+// Returns the result of a multi processed merge sort - the sort part - over the passed list
+func msort_sort_multi(a []int, responses chan []int) {
+    responses <- msort_sort(a)
 }
 
-func merge_multi(list_part_left []int, list_part_right []int, responses chan []int) {
-    responses <- merge(list_part_left, list_part_right)
+// Returns the result of a multi processed merge sort - the merge part - over the passed lists
+func msort_merge_multi(l []int, r []int, responses chan []int) {
+    responses <- msort_merge(l, r)
 }
 
-func merge_sort(a []int) []int {
-    length_a := float64(len(a))
-    if length_a <= 1 {
+// Returns the result of a merge sort - the sort part - over the passed list
+func msort_sort(a []int) []int {
+
+    // if len of list is zero or 1, the list is ordered.
+    if len(a) <= 1 {
+
+        // return the list
         return a
     }
-    m := int(math.Floor(length_a / 2))
-    a_left := a[0:m]
-    a_right := a[m:]
-    a_left = merge_sort(a_left)
-    a_right = merge_sort(a_right)
-    return merge(a_left, a_right)
+
+    // split the list 
+    m := int(math.Floor(float64(len(a))/2))
+    
+    // return the merged result of merge sort call over l and r parts - divide and conquer
+    return msort_merge(msort_sort(a[0:m]), msort_sort(a[m:]))
+
 }
 
-func merge(left []int, right []int) (a []int) {
-    for len(left) > 0 || len(right) > 0 {
-        if len(left) > 0 && len(right) > 0 {
-            if left[0] <= right[0] {
-                a = append(a, left[0])
-                left = left[1:]
+// Returns the result of a merge sort - the merge part - over the passed lists
+func msort_merge(l []int, r []int) (a []int) {
+
+    // while there are elements in the list
+    for len(l) > 0 || len(r) > 0 {
+
+        // if both list are not empty
+        if len(l) > 0 && len(r) > 0 {
+
+            // append to a the smallest of the two first element of left and right part
+            if l[0] <= r[0] {
+
+                // append and remove first element of left part
+                a = append(a, l[0])
+                l = l[1:]
+
             } else {
-                a = append(a, right[0])
-                right = right[1:]
+
+                // append and remove first element of right part
+                a = append(a, r[0])
+                r = r[1:]
+
             }
+
         } else {
-            if len(left) > 0 {
-                a = append(a, left...)
+
+            // append left part
+            if len(l) > 0 {
+
+                // append right part
+                a = append(a, l...)
                 break
+
             } else {
-                if len(right) > 0 {
-                    a = append(a, right...)
+
+                if len(r) > 0 {
+
+                    // append right part
+                    a = append(a, r...)
                     break
                 }
+
             }
         }
     }
+
+    // return a
     return a
+
 }
 
+// Return true if the passed list are equals
 func testEq(a, b []int) bool {
 
     if a == nil && b == nil {
@@ -65,15 +100,18 @@ func testEq(a, b []int) bool {
     }
 
     if a == nil || b == nil {
+        fmt.Println(a, b)
         return false;
     }
 
     if len(a) != len(b) {
+        fmt.Println(len(a), len(b))
         return false
     }
 
     for i := range a {
         if a[i] != b[i] {
+            fmt.Println(a[i], b[i])
             return false
         }
     }
@@ -81,121 +119,211 @@ func testEq(a, b []int) bool {
     return true
 }
 
+// Convert duration in seconds
 func fmtDuration(d time.Duration) string {
+
     return fmt.Sprintf("%f", d.Seconds())
+
 }
 
-func readLines(path string) ([]int, error) {
+// Read lines of column file to a slice of integer
+func readLines(path string) (a []int, err error) {
+
+    // read the file
     file, err := os.Open(path)
+
+    // if err, panic
     if err != nil {
-        return nil, err
+        return a, err
     }
+
+    // defer close when function return
     defer file.Close()
 
-    var lines []int
+    // scan file 
     scanner := bufio.NewScanner(file)
+    
+    // while EOF
     for scanner.Scan() {
+
+        // convert next line to int
         num, err := strconv.Atoi(scanner.Text())
+
+        // if err, ignore
         if err == nil {
-            lines = append(lines, num)
+            a = append(a, num)
+        }
+
+    }
+
+    // return list and err
+    return a, scanner.Err()
+
+}
+
+// Run merge sort over a random generated list or a list of integers provided in 
+// filename. Save statistics to output file and prints logs during computation
+func sorting(f string, q int, r bool, c int) {
+
+    // channel process response
+    responses := make(chan []int)
+
+    // init of var
+    a := []int{}
+    var err error
+
+    // sign start time for reading
+    startTime := time.Now()
+
+    // read list of integers from file
+    if !r {
+
+        a, err = readLines(f)
+
+        if err != nil {
+            panic(err)
+        }
+
+        fmt.Printf("List length: %d\n", len(a))
+        fmt.Printf("Random list readed in %s\n", fmtDuration(time.Now().Sub(startTime)))
+
+    } else { // create random list
+
+        a = rand.Perm(q)
+
+        fmt.Printf("List length: %d\n", q)
+        fmt.Printf("Random list generated in %s\n", fmtDuration(time.Now().Sub(startTime)))
+
+    }
+
+    if c > 1 {
+        if math.Mod(float64(c), 2) != 0 {
+            c = c - 1
         }
     }
-    return lines, scanner.Err()
+
+    // start time creation
+    startTime = time.Now()
+
+    // single core elapsed time
+    single := msort_sort(a)
+
+    // single core elapsed time
+    singleCoreTime := time.Now().Sub(startTime)
+
+    // sort algorithm from standard library
+    aSorted := a[:]
+    sort.Ints(aSorted)
+
+    fmt.Printf("Verification of sorting algorithm %v\n", testEq(aSorted, single))
+    fmt.Printf("Single go-routine: %s sec\n", fmtDuration(singleCoreTime))
+
+    // if processes number > 1
+    if c > 1 {
+
+        // write result to file
+        d1 := []byte("go-mergesort-"+strconv.Itoa(c)+".txt")
+        err := ioutil.WriteFile("./go-mergesort-"+strconv.Itoa(c)+".dat", d1, 0755)
+        if err != nil {
+            panic(err)
+        }
+        fmt.Printf("Starting %d-go-routine process\n", c)
+
+        //  save start time
+        startTime = time.Now()
+
+        // compute number of steps for specified number of process
+        step := int(math.Floor(float64(len(a)/c)))
+
+        // assign each go routine a portion of sorting
+        for n := 0; n < c; n++ {
+
+            // assign to the last go-routine the remaining part of list to order
+            if n < c-1 {
+                go msort_sort_multi(a[n*step:(n+1)*step], responses)
+            } else {
+                go msort_sort_multi(a[n*step:], responses)
+            }
+
+        }
+
+        // use the same number of go-routine to handle the final sort
+        fmt.Printf("Performing final msort_merge...\n")
+        startTimeFinalMerge := time.Now()
+
+        // merge each part of list and pull the result in the response (handled by channel)
+        if len(responses) > 2 {
+
+            // while there are at least a response in the list
+            for len(responses) > 0 {
+
+                // assign first two part
+                go msort_merge_multi(<-responses, <-responses, responses)
+
+            }
+
+        }
+
+        // perform final merge step
+        a = msort_merge(<-responses, <-responses)
+
+        // final merge time
+        finalMergeTime := time.Now().Sub(startTimeFinalMerge)
+
+        // final merge
+        fmt.Printf("Final msort_merge duration: %s\n", fmtDuration(finalMergeTime))
+
+        // final merge
+        multiCoreTime := time.Now().Sub(startTime)
+
+        fmt.Printf("Sorted arrays equal : %v\n", (testEq(a, single)))
+        fmt.Printf("%d-process ended: %s sec\n", c, fmtDuration(multiCoreTime))
+
+        d1 = []byte(fmt.Sprintf("%d %s %s %s %s\n",
+            len(a),
+            fmtDuration(singleCoreTime),
+            fmtDuration(multiCoreTime),
+            fmtDuration(multiCoreTime/singleCoreTime),
+            fmtDuration(finalMergeTime)))
+
+
+        err = ioutil.WriteFile("./go-mergesort-"+strconv.Itoa(c)+".txt", d1, 0755)
+
+        if err != nil {
+            panic(err)
+        }
+
+    }
+
 }
 
 func main() {
 
-    cores := 1
-    var err error = nil
-    if len(os.Args) == 2 {
-        cores, err = strconv.Atoi(os.Args[1])
-        if err == nil {
-            if cores > 1 {
-                if math.Mod(float64(cores), 2) != 0 {
-                    cores = cores - 1
-                }
-            }
-        } else {
-            cores = 1
-        }
+    // parser to get argument from command line
+    parser := argparse.NewParser("Sorting", "Create a random column of integers and save the to file. " +
+                        "Sort integers reading from a column file or randomly generated")
+
+    // add argument to command line
+    fileName       := parser.String("f","filename",    &argparse.Options{Required: false, Help: "Name of file for the list."})
+    randomFlag     := parser.Flag(  "r","random",      &argparse.Options{Required: false, Help: "Random list generation."})
+    listLengthStr  := parser.String("l","listLength",  &argparse.Options{Required: false, Help: "Name of person to greet."})
+    coresNumberStr := parser.String("c","coresnumber", &argparse.Options{Required: false, Help: "Number of cores to use in the sorting."})
+
+    err := parser.Parse(os.Args)
+    if err != nil {
+        fmt.Println(err.Error())
     }
-    fmt.Printf("Using %d cores\n", cores)
 
-    responses := make(chan []int)
+    listLength, err  := strconv.Atoi(*listLengthStr)
+    coresNumber, err := strconv.Atoi(*coresNumberStr)
 
-    random := false
-    a := []int{}
-    start_time := time.Now()
-    if !random {
-        start_time := time.Now()
-        a, err = readLines("list.csv")
-        if err != nil {
-            panic(err)
-        }
-        fmt.Printf("Random list readed in %s\n", fmtDuration(time.Now().Sub(start_time)))
-        fmt.Printf("List length: %d\n", len(a))
-    } else {
-        dummy := rand.Intn(300000)
-        l := dummy*5 + rand.Intn(300000)
-        fmt.Printf("List length: %d\n", l)
-        a = rand.Perm(l)
-        fmt.Printf("Random list generated in %s\n", fmtDuration(time.Now().Sub(start_time)))
+    if err != nil {
+        panic(err)
     }
-    l := len(a)
-    start_time = time.Now()
-    single := merge_sort(a)
-    single_core_time := time.Now().Sub(start_time)
-    a_sorted := a[:]
-    sort.Ints(a_sorted)
-    fmt.Printf("Verification of sorting algorithm %v\n", testEq(a_sorted, single))
-    fmt.Printf("Single Core: %s sec\n", fmtDuration(single_core_time))
-    if cores > 1 {
 
-        d1 := []byte("go-mergesort-"+strconv.Itoa(cores)+".dat")
-        err := ioutil.WriteFile("./go-mergesort-"+strconv.Itoa(cores)+".dat", d1, 0755)
-        if err != nil {
-            panic(err)
-        }
-        fmt.Printf("Starting %d-core process\n", cores)
-        start_time = time.Now()
-        step := int(math.Floor(float64(l / cores)))
-        for n := 0; n < cores; n++ {
-            if n < cores-1 {
-                go merge_sort_multi(a[n*step:(n+1)*step], responses)
-            } else {
-                go merge_sort_multi(a[n*step:], responses)
-            }
-        }
-        fmt.Printf("Performing final merge...\n")
-        start_time_final_merge := time.Now()
-        if len(responses) > 2 {
-            for len(responses) > 0 {
-                go merge_multi(<-responses, <-responses, responses)
-            }
-        }
-        a = merge(<-responses, <-responses)
-        final_merge_time := time.Now().Sub(start_time_final_merge)
-        fmt.Printf("Final merge duration: %s\n", fmtDuration(final_merge_time))
-        multi_core_time := time.Now().Sub(start_time)
-        fmt.Printf("Sorted arrays equal : %v\n", (testEq(a, single)))
-        fmt.Printf("%d-Core ended: %s sec\n", cores, fmtDuration(multi_core_time))
-        d1 = []byte(fmt.Sprintf("%d %s %s %s %s\n", l,
-            fmtDuration(single_core_time),
-            fmtDuration(multi_core_time),
-            fmtDuration(multi_core_time/single_core_time),
-            fmtDuration(final_merge_time)))
-        err = ioutil.WriteFile("./go-mergesort-"+strconv.Itoa(cores)+".dat", d1, 0755)
-        if err != nil {
-            panic(err)
-        }
+    sorting(*fileName, listLength, *randomFlag, coresNumber)
 
-    }
 }
-
-
-
-
-
 
 
 
