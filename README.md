@@ -1,6 +1,6 @@
 ## GoLang vs Python
 
-A Golang vs Python single and multicore msort_merge-sort implementation comparison. For more details, read my blog post [here](https://made2591.github.io/blog/go-py-benchmark).
+A Golang vs Python single and multicore msort_merge-sort implementation comparison. For more details, read my blog post [go-py-benchmark](https://made2591.github.io/posts/go-py-benchmark).
 
 ### Dependencies
 For Python, there are no dependencies: I use Python 2.7, it should work fine.
